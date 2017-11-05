@@ -1,0 +1,15 @@
+[Unit]
+Description=EAP proxy
+Before=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /var/lib/git/eap_proxy.py YOUR_ONT YOUR_INT
+StandardOutput=journal
+StandardError=journal
+KillMode=process
+Restart=on-failure
+Type=simple
+
+[Install]
+WantedBy=multi-user.target network.target
+
