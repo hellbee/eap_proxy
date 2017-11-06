@@ -5,8 +5,13 @@ from threading import Thread
 import signal
 import ctypes
 import fcntl
+import os
 import sys
 import datetime
+
+def log(msg, datestr='[%D %T] ') :
+    d = datetime.datetime
+    print( d.strftime(d.now(), datestr) + msg)
 
 class Sniffer():
     # Structure for ifreq interface flags
@@ -23,7 +28,7 @@ class Sniffer():
             self.s_ont.bind((iface_ont,0))
         except socket.error as err:
             # Print error and exit with error code on failure
-            print("Could not create socket on " + iface_ont + ": " + err.args[1])
+            log("Could not create socket on " + iface_ont + ": " + err.args[1])
             sys.exit(err.args[0])
 
         try:
@@ -32,7 +37,7 @@ class Sniffer():
             self.s_int.bind((iface_int,0))
         except socket.error as err :
             # Print error and exit with error code on failure
-            print("Could not create socket on " + iface_ont + ": " + err.args[1])
+            log("Could not create socket on " + iface_ont + ": " + err.args[1])
             sys.exit(err.args[0])
 
         self.sniff = True
@@ -51,12 +56,19 @@ class Sniffer():
         src = s_sock.getsockname()[0]
         dst = d_sock.getsockname()[0]
 
-        print( "Started sniffing for EAP packets on " + src)
-        fails = 0
+        log( "Started sniffing for EAP packets on " + src)
         while( self.sniff ):
-            pkt = s_sock.recv(2048)
-            d_sock.send(pkt)
-            print( "Relayed " + str(len(pkt)) + " byte EAP packet from " + src + " => " + dst)
+            try:
+                pkt = s_sock.recv(2048)
+            except socket.error as err :
+                log( 'Receiving socket error: ' + err.args[1])
+                os._exit(err.args[0])
+            try:
+                d_sock.send(pkt)
+            except socket.error as err :
+                log( 'Sending socket error: ' + err.args[1])
+                os._exit(err.args[0])
+            log( "Relayed " + str(len(pkt)) + " byte EAP packet from " + src + " => " + dst)
 
     # Put an interface into promiscuous mode
     def promisc(self, iface, tog):
@@ -79,7 +91,7 @@ class Sniffer():
 
 
 def signal_handler(signal, frame):
-    print('Caught signal, exiting...')
+    log('Caught signal, exiting...')
     snf.sniff = False
     snf.promisc(snf.s_ont,False)
     snf.promisc(snf.s_int,False)
@@ -89,7 +101,7 @@ def signal_handler(signal, frame):
             try:
                 thread._Thread__stop()
             except:
-                print((str(thread.getName()) + ' could not be terminated'))
+                log(str(thread.getName()) + ' could not be terminated')
                 sys.exit(1)
     sys.exit(0)
 
@@ -103,14 +115,4 @@ if __name__ == "__main__":
 
     for t in threads: t.start()
     signal.signal(signal.SIGINT, signal_handler)
-    #signal.pause() # Not sure why this was here, prevented
-                    # the program from exiting and would hang
-                    # if running as a daemon, preventing restart.
-                    # Maybe it was @todo for proper locking
-                    # on the threads so it could survive the
-                    # interfaces going up and down?
-                    #
-                    # In any case, I've changed the behavior
-                    # to unset promisc and exit on any socket
-                    # errors so systemd can reatart it and
-                    # keep it running as a service.
+    #signal.pause()
